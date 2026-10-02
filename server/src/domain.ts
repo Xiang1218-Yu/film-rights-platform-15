@@ -6,8 +6,9 @@ export interface Project { id: string; code: string; title: string; season: numb
 export interface BudgetLine { id: string; projectId: string; category: string; subcategory: string; planned: number; committed: number; actual: number; forecast: number; owner: string; risk: 'low' | 'medium' | 'high'; }
 export interface Contract { id: string; projectId: string; vendor: string; scope: string; ceiling: number; committed: number; paid: number; milestones: { name: string; due: string; amount: number; status: 'open' | 'invoiced' | 'paid' }[]; }
 export interface Asset { id: string; projectId: string; name: string; type: AssetType; version: number; status: 'draft' | 'review' | 'approved' | 'locked'; owner: string; checksum: string; territories: string[]; platforms: string[]; availableFrom: string; availableTo: string; rightsTags: string[]; }
-export interface Approval { id: string; projectId: string; entityType: 'budget' | 'asset' | 'delivery'; entityId: string; title: string; requestedBy: string; status: ApprovalStatus; approver: string; createdAt: string; comment?: string; }
+export interface Approval { id: string; projectId: string; entityType: 'budget' | 'asset' | 'delivery'; entityId: string; title: string; requestedBy: string; status: ApprovalStatus; approver: string; createdAt: string; comment?: string; entityVersion?: string; riskSnapshot?: string; }
 export interface AuditEvent { id: string; action: string; entity: string; entityId: string; actor: string; at: string; details: string; }
+export interface Delivery { id: string; projectId: string; name: string; version: number; destination: string; dueDate: string; checklist: { item: string; done: boolean }[]; milestones: { name: string; due: string; status: 'done' | 'open' | 'blocked' }[]; blockers: string[]; }
 
 const now = Date.now();
 const iso = (days: number) => new Date(now + days * 86400000).toISOString().slice(0, 10);
@@ -34,10 +35,18 @@ export const assets: Asset[] = [
   { id: 'AST-003', projectId: 'PRJ-001', name: '片尾曲 / Winter Signal', type: 'audio', version: 2, status: 'locked', owner: '音乐版权', checksum: 'sha256:113c…78f0', territories: ['CN', 'US', 'CA'], platforms: ['影院', 'StreamBox'], availableFrom: iso(-40), availableTo: iso(52), rightsTags: ['音乐-同步许可'] },
   { id: 'AST-004', projectId: 'PRJ-002', name: 'Orbit E02 Satellite Plates', type: 'master', version: 3, status: 'review', owner: '视觉总监', checksum: 'sha256:8a10…4a9d', territories: ['全球'], platforms: ['影院'], availableFrom: iso(18), availableTo: iso(365), rightsTags: ['航拍-编辑许可'] }
 ];
+export const deliveries: Delivery[] = [
+  { id: 'DEL-005', projectId: 'PRJ-001', name: 'StreamBox 上线母版交付包', version: 2, destination: 'StreamBox 平台 / CN', dueDate: iso(30), checklist: [{ item: 'E01-E08 母版锁定并登记 checksum', done: false }, { item: '字幕与音轨交付物齐套', done: true }, { item: '版权授权窗口核验', done: true }, { item: '交付包 MD5 校验单签署', done: false }], milestones: [{ name: '技术审片 (QC)', due: iso(12), status: 'open' }, { name: '平台物料上传', due: iso(24), status: 'blocked' }, { name: '上线排期确认', due: iso(30), status: 'open' }], blockers: ['E01 最终母版未锁定（APR-02 待批）', '物料上传节点被 QC 前置阻断'] },
+  { id: 'DEL-007', projectId: 'PRJ-002', name: '海外节展交付包', version: 1, destination: '节展组委会 / EU', dueDate: iso(60), checklist: [{ item: '航拍授权凭证归档', done: true }, { item: 'DCP 与字幕版本核验', done: true }], milestones: [{ name: '节展报名材料提交', due: iso(-3), status: 'done' }, { name: '放映拷贝寄送', due: iso(21), status: 'open' }], blockers: [] }
+];
+export function budgetRiskSignature(lines: BudgetLine[]) { const count = { high: 0, medium: 0, low: 0 }; lines.forEach(line => { count[line.risk] += 1; }); return `high:${count.high}/medium:${count.medium}/low:${count.low}`; }
 export const approvals: Approval[] = [
-  { id: 'APR-01', projectId: 'PRJ-001', entityType: 'budget', entityId: 'BUD-001-V3', title: '后期超支预案 V3', requestedBy: '制片主任', status: 'pending', approver: '财务负责人', createdAt: iso(-1) },
-  { id: 'APR-02', projectId: 'PRJ-001', entityType: 'asset', entityId: 'AST-001', title: 'E01 最终母版锁定', requestedBy: '后期制片', status: 'pending', approver: '总制片人', createdAt: iso(-2) },
-  { id: 'APR-03', projectId: 'PRJ-002', entityType: 'delivery', entityId: 'DEL-007', title: '海外节展交付包', requestedBy: '发行部', status: 'approved', approver: '法务负责人', createdAt: iso(-5), comment: '已补充航拍授权凭证' }
+  { id: 'APR-01', projectId: 'PRJ-001', entityType: 'budget', entityId: 'BUD-001-V3', title: '后期超支预案 V3', requestedBy: '制片主任', status: 'pending', approver: '财务负责人', createdAt: iso(-1), entityVersion: 'BUD-001-V3', riskSnapshot: budgetRiskSignature(budgetLines.filter(line => line.projectId === 'PRJ-001')) },
+  { id: 'APR-02', projectId: 'PRJ-001', entityType: 'asset', entityId: 'AST-001', title: 'E01 最终母版锁定', requestedBy: '后期制片', status: 'pending', approver: '总制片人', createdAt: iso(-2), entityVersion: '7' },
+  { id: 'APR-03', projectId: 'PRJ-002', entityType: 'delivery', entityId: 'DEL-007', title: '海外节展交付包', requestedBy: '发行部', status: 'approved', approver: '法务负责人', createdAt: iso(-5), comment: '已补充航拍授权凭证', entityVersion: '1' },
+  { id: 'APR-04', projectId: 'PRJ-001', entityType: 'budget', entityId: 'BUD-001-V2', title: '后期超支预案 V2', requestedBy: '制片主任', status: 'pending', approver: '财务负责人', createdAt: iso(-6), entityVersion: 'BUD-001-V2' },
+  { id: 'APR-05', projectId: 'PRJ-001', entityType: 'delivery', entityId: 'DEL-005', title: 'StreamBox 上线交付放行', requestedBy: '发行部', status: 'pending', approver: '总制片人', createdAt: iso(-1), entityVersion: '2' },
+  { id: 'APR-06', projectId: 'PRJ-001', entityType: 'asset', entityId: 'AST-099', title: '预告片 AST-099 授权复核', requestedBy: '营销部', status: 'pending', approver: '法务负责人', createdAt: iso(-3), entityVersion: '1' }
 ];
 export const auditEvents: AuditEvent[] = [{ id: 'AUD-01', action: 'CREATE', entity: 'budget', entityId: 'BUD-001-V3', actor: '制片主任', at: new Date(now - 86400000).toISOString(), details: '从 V2 复制并调整后期科目' }];
 
@@ -64,9 +73,54 @@ export function rightsConflicts(projectId = projects[0].id) {
   return conflicts;
 }
 
-export function approve(id: string, status: ApprovalStatus, comment = '') {
-  const item = approvals.find(approval => approval.id === id); if (!item) return undefined;
-  item.status = status; item.comment = comment; auditEvents.unshift({ id: `AUD-${Date.now()}`, action: status.toUpperCase(), entity: item.entityType, entityId: item.entityId, actor: '当前审批人', at: new Date().toISOString(), details: comment || `${item.title} 已${status === 'approved' ? '通过' : '驳回'}` }); return item;
+export function currentEntityVersion(item: Pick<Approval, 'entityType' | 'entityId' | 'projectId'>): string | undefined {
+  if (item.entityType === 'budget') return projects.find(project => project.id === item.projectId)?.budgetVersionId;
+  if (item.entityType === 'asset') { const asset = assets.find(entry => entry.id === item.entityId && entry.projectId === item.projectId); return asset ? String(asset.version) : undefined; }
+  const delivery = deliveries.find(entry => entry.id === item.entityId && entry.projectId === item.projectId); return delivery ? String(delivery.version) : undefined;
 }
-export function createApproval(input: Pick<Approval, 'projectId' | 'entityType' | 'entityId' | 'title' | 'requestedBy' | 'approver'>) { const item: Approval = { ...input, id: `APR-${Date.now()}`, status: 'pending', createdAt: new Date().toISOString() }; approvals.unshift(item); return item; }
+
+export type ReviewState = 'ready' | 'superseded' | 'missing' | 'risk-changed';
+export type ReviewContext =
+  | { kind: 'budget'; budgetVersionId: string; totals: { planned: number; committed: number; actual: number; forecast: number }; riskSignature: string; lines: BudgetLine[] }
+  | { kind: 'asset'; asset: Asset; conflicts: ReturnType<typeof rightsConflicts> }
+  | { kind: 'delivery'; delivery: Delivery };
+export interface ApprovalReview { approval: Approval; state: ReviewState; stateReason?: string; entityVersion?: string; generatedAt: string; context?: ReviewContext; }
+
+// 只读复核视图：不修改审批状态、不写审计事件，打开/关闭/刷新均无副作用。
+export function approvalReviewContext(approvalId: string): ApprovalReview | undefined {
+  const approval = approvals.find(item => item.id === approvalId); if (!approval) return undefined;
+  const generatedAt = new Date().toISOString();
+  const entityVersion = currentEntityVersion(approval);
+  if (approval.entityType === 'budget') {
+    const project = projects.find(entry => entry.id === approval.projectId);
+    if (!project) return { approval, state: 'missing', stateReason: `所属项目 ${approval.projectId} 不存在`, generatedAt };
+    const lines = budgetLines.filter(line => line.projectId === approval.projectId);
+    const context: ReviewContext = { kind: 'budget', budgetVersionId: project.budgetVersionId, totals: { planned: lines.reduce((sum, line) => sum + line.planned, 0), committed: lines.reduce((sum, line) => sum + line.committed, 0), actual: lines.reduce((sum, line) => sum + line.actual, 0), forecast: lines.reduce((sum, line) => sum + line.forecast, 0) }, riskSignature: budgetRiskSignature(lines), lines };
+    if (approval.entityId !== project.budgetVersionId) return { approval, state: 'superseded', stateReason: `预算实体已换版：申请基于 ${approval.entityId}，当前生效版本为 ${project.budgetVersionId}，请发起人基于新版本重新提交`, entityVersion, generatedAt, context };
+    if (approval.riskSnapshot && approval.riskSnapshot !== context.riskSignature) return { approval, state: 'risk-changed', stateReason: `风险画像在申请后发生变化（${approval.riskSnapshot} → ${context.riskSignature}），需重新评估后再审`, entityVersion, generatedAt, context };
+    return { approval, state: 'ready', entityVersion, generatedAt, context };
+  }
+  if (approval.entityType === 'asset') {
+    const asset = assets.find(entry => entry.id === approval.entityId && entry.projectId === approval.projectId);
+    if (!asset) return { approval, state: 'missing', stateReason: `资产 ${approval.entityId} 不存在或已从登记册移除`, generatedAt };
+    const conflicts = rightsConflicts(approval.projectId).filter(conflict => conflict.assetA === asset.name || conflict.assetB === asset.name);
+    const context: ReviewContext = { kind: 'asset', asset, conflicts };
+    if (approval.entityVersion && approval.entityVersion !== String(asset.version)) return { approval, state: 'superseded', stateReason: `资产已换版：申请基于 v${approval.entityVersion}，当前登记为 v${asset.version}，旧版本详情不可作为审批依据`, entityVersion, generatedAt, context };
+    return { approval, state: 'ready', entityVersion, generatedAt, context };
+  }
+  const delivery = deliveries.find(entry => entry.id === approval.entityId && entry.projectId === approval.projectId);
+  if (!delivery) return { approval, state: 'missing', stateReason: `交付包 ${approval.entityId} 不存在或已撤销`, generatedAt };
+  const context: ReviewContext = { kind: 'delivery', delivery };
+  if (approval.entityVersion && approval.entityVersion !== String(delivery.version)) return { approval, state: 'superseded', stateReason: `交付清单已换版：申请基于 v${approval.entityVersion}，当前为 v${delivery.version}，旧清单不可作为放行依据`, entityVersion, generatedAt, context };
+  return { approval, state: 'ready', entityVersion, generatedAt, context };
+}
+
+export type ApproveResult = { ok: true; approval: Approval } | { ok: false; reason: 'not-found' } | { ok: false; reason: 'already-decided' } | { ok: false; reason: 'version-conflict'; currentVersion?: string };
+export function approve(id: string, status: ApprovalStatus, comment = '', expectedEntityVersion?: string): ApproveResult {
+  const item = approvals.find(approval => approval.id === id); if (!item) return { ok: false, reason: 'not-found' };
+  if (item.status !== 'pending') return { ok: false, reason: 'already-decided' };
+  if (expectedEntityVersion !== undefined) { const current = currentEntityVersion(item); if (current !== expectedEntityVersion) return { ok: false, reason: 'version-conflict', currentVersion: current }; }
+  item.status = status; item.comment = comment; auditEvents.unshift({ id: `AUD-${Date.now()}`, action: status.toUpperCase(), entity: item.entityType, entityId: item.entityId, actor: '当前审批人', at: new Date().toISOString(), details: comment || `${item.title} 已${status === 'approved' ? '通过' : '驳回'}` }); return { ok: true, approval: item };
+}
+export function createApproval(input: Pick<Approval, 'projectId' | 'entityType' | 'entityId' | 'title' | 'requestedBy' | 'approver'>) { const item: Approval = { ...input, id: `APR-${Date.now()}`, status: 'pending', createdAt: new Date().toISOString() }; const version = currentEntityVersion(item); if (version) item.entityVersion = version; if (item.entityType === 'budget') item.riskSnapshot = budgetRiskSignature(budgetLines.filter(line => line.projectId === item.projectId)); approvals.unshift(item); return item; }
 export function dashboard() { return projects.map(project => projectSummary(project.id)).map(summary => ({ id: summary.project?.id, title: summary.project?.title, status: summary.project?.status, forecast: summary.forecast, variance: summary.variance, pendingApprovals: summary.pendingApprovals, rightsConflicts: rightsConflicts(summary.project?.id).length })); }
